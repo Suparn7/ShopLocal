@@ -1,0 +1,138 @@
+"Create a full-stack web app for Indian small towns with three user roles (customer, vendor, admin) using Next.js, Tailwind, and Supabase. Features needed:
+
+Multi-role Auth (Phone OTP + Email):
+
+Customer: Browse shops, place orders
+
+Vendor: Manage inventory/orders (mobile-friendly)
+
+Admin: Approve vendors, manage categories
+
+Geo-Localized Marketplace:
+
+Shop categories (General Store, Jewellery, Pharmacy, etc.)
+
+Location-based filtering (within 5km radius)
+
+Delivery availability toggle
+
+Core Features:
+
+Vendor dashboard with inventory management
+
+Order management system with status tracking (Pending → Dispatched → Delivered)
+
+Customer review system with star ratings
+
+Admin moderation panel with analytics
+
+India-Specific Adaptations:
+
+Multi-language support (Hindi + English)
+
+UPI payment integration
+
+WhatsApp order notifications
+
+GST-compliant billing
+
+Mobile-first responsive design
+
+Tech Stack: Next.js 14 App Router, Supabase (Auth/DB/Storage), ShadCN UI, Zod validation, React Hook Form. Use WebContainers for real-time preview and deploy to Vercel."
+
+Key Market Considerations Embedded:
+
+Localization Strategy:
+
+Language: Implement language toggle for regional accessibility
+
+Payment: UPI integration for frictionless payments (Razorpay/PhonePe APIs)
+
+Notifications: WhatsApp API integration for order updates (critical in India's app ecosystem)
+
+Vendor Onboarding:
+
+Simple KYC flow with document upload (GSTIN/PAN)
+
+Inventory templates for common shop categories
+
+Bulk CSV import for existing product catalogs
+
+Discoverability Features:
+
+"Near Me" sorting with distance indicators
+
+Popular categories carousel (pre-seeded with common Indian shop types)
+
+Festival-specific promotional banners (Diwali, Holi etc.)
+
+Admin Safeguards:
+
+Vendor verification system
+
+Order dispute resolution panel
+
+Commission rate configuration
+
+Local delivery partner integration hooks
+
+Pro Tips for Bolt.new Implementation:
+
+Phased Prompting (Better than single massive prompt):
+
+First: "Scaffold Next.js 14 app with Supabase auth and 3 role types"
+
+Then: "Add vendor dashboard with inventory CRUD operations"
+
+Finally: "Implement location filter using PostGIS and 5km radius"
+
+Precision Add-ons:
+
+"Use react-google-maps for location selection"
+
+"Implement optimistic UI updates for order status changes"
+
+"Add dark mode toggle with system preference detection"
+
+Post-Build Enhancements:
+
+"Generate API documentation using Swagger"
+
+"Add Lighthouse CI integration for performance tracking"
+
+"Implement error tracking with Sentry"
+
+
+Thought for 8s
+
+
+
+
+
+
+
+
+
+
+Based on your requirements, I'll create a comprehensive e-commerce platform tailored specifically for Indian small towns. This MVP will focus on connecting local vendors with customers through a location-based marketplace with role-specific features.
+
+Core Features:
+
+Multi-role authentication system with Phone OTP and Email verification
+Geo-localized marketplace with shop categorization and radius-based filtering
+Vendor dashboard with inventory and order management
+Customer interface for browsing, ordering, and reviewing local shops
+Admin panel for vendor approval and platform oversight
+Bilingual support (Hindi/English) with mobile-first responsive design
+UPI payment integration and GST-compliant invoice generation
+WhatsApp integration for order notifications
+Design Elements:
+
+Warm, approachable color palette reflecting Indian cultural aesthetics
+Mobile-optimized UI with thumb-friendly interaction zones
+Progressive disclosure of features based on user role and context
+Consistent 8px spacing system with proper visual hierarchy
+Subtle micro-interactions and transitions for enhanced user experience
+High-contrast text and interface elements for readability in outdoor settings
+Optimized performance for varying network conditions
+Recognizable UI patterns familiar to Indian e-commerce users
