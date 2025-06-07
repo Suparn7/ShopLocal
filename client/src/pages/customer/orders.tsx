@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"; // Import Dialog components
 import { Textarea } from "@/components/ui/textarea";
 import { useSocket } from "@/hooks/useSocket";
+import { useLocation } from "wouter";
 
 interface OrderWithDetails extends Order {
   items: OrderItem[];
@@ -26,10 +27,30 @@ export default function CustomerOrders() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { toast } = useToast();
+  const [location] = useLocation();
   const [isReviewModalOpen, setReviewModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null);
   const [fetchedOrders, setFetchedOrders] = useState<OrderWithDetails[]>([]);
-  // Inside the `CustomerOrders` component
+  const [selectedStatus, setSelectedStatus] = useState<OrderStatus | "all">("all"); // Add status filter
+  const [highlightedOrderId, setHighlightedOrderId] = useState<number | null>(null);
+
+   // Parse the `orderId` query parameter
+   useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const orderId = params.get("orderId");
+    if (orderId) {
+      setHighlightedOrderId(parseInt(orderId, 10));
+    }
+  }, [location]);
+
+  useEffect(() => {
+    if (highlightedOrderId) {
+      const element = document.getElementById(`order-${highlightedOrderId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth" });
+      }
+    }
+  }, [highlightedOrderId]);
 
   // Fetch orders
   const { data: orders, isLoading: ordersLoading } = useQuery<OrderWithDetails[]>({
@@ -49,6 +70,12 @@ useEffect(() => {
     setFetchedOrders(orders);
   }
 }, [orders]);
+
+ // Sort and filter orders
+ const sortedAndFilteredOrders = fetchedOrders
+ .filter((order) => selectedStatus === "all" || order.status === selectedStatus) // Filter by status
+ .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); // Sort by date (latest first)
+
   
   // For each order, fetch products
   const { isLoading: productsLoading } = useQuery({
@@ -133,7 +160,7 @@ useEffect(() => {
   },[fetchedOrders]);
   
   // Use the WebSocket hook
-  useSocket(user?.id, handleSocketEvent);
+  useSocket(user?.id, user?.role, handleSocketEvent);
   
   useEffect(() => {
     document.title = `${t("common.orders")} - ShopLocal`;
@@ -162,7 +189,21 @@ useEffect(() => {
     <CustomerLayout>
       <div className="container mx-auto px-4 py-4 pb-20">
         <h1 className="text-xl font-semibold mb-4">{t("common.orders")}</h1>
-        
+        {/* Status Filter */}
+        <div className="mb-4">
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value as OrderStatus | "all")}
+            className="border border-neutral-300 rounded-md px-3 py-2 text-sm"
+          >
+            <option value="all">{t("customer.allOrders")}</option>
+            <option value={OrderStatus.PENDING}>{t("status.pending")}</option>
+            <option value={OrderStatus.CONFIRMED}>{t("status.confirmed")}</option>
+            <option value={OrderStatus.DISPATCHED}>{t("status.dispatched")}</option>
+            <option value={OrderStatus.DELIVERED}>{t("status.delivered")}</option>
+            <option value={OrderStatus.CANCELLED}>{t("status.cancelled")}</option>
+          </select>
+        </div>
         {isLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -180,7 +221,7 @@ useEffect(() => {
           </div>
         ) : (
           <div className="space-y-4">
-            {enrichedFetchedOrders.map((order) => (
+            {sortedAndFilteredOrders.map((order) => (
               <Card key={order.id}>
                 <CardContent className="p-4">
                   <div className="flex justify-between items-start">
@@ -209,7 +250,11 @@ useEffect(() => {
                             const product = order.products?.[item.productId];
                             
                             return (
-                              <div key={item.id} className="flex justify-between text-sm">
+                              <div key={item.id} id={`order-${item.id}`} 
+                              className={`p-4 border rounded mb-2 ${
+                                highlightedOrderId === order.id ? "bg-yellow-100" : ""
+                              }`}
+                              >
                                 <div>
                                   <div>{product?.name || `Product #${item.productId}`}</div>
                                   <div className="text-xs text-muted-foreground">

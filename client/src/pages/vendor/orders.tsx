@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import { formatCurrency, getStatusBadgeClass } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useSocket } from "@/hooks/useSocket";
 
 // Extended Order interface with items
 interface OrderWithDetails extends Order {
@@ -27,7 +28,8 @@ export default function VendorOrders() {
   const [selectedTab, setSelectedTab] = useState<OrderStatus | "all">("all");
   const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null);
   const [orderDetailsOpen, setOrderDetailsOpen] = useState(false);
-  
+  const [orders, setOrders] = useState<OrderWithDetails[]>([]); // State for orders
+
   // Fetch vendor shops
   const { data: shops, isLoading: shopsLoading } = useQuery<Shop[]>({
     queryKey: ["/api/vendor/shops"],
@@ -35,10 +37,26 @@ export default function VendorOrders() {
   });
   
   // Fetch orders
-  const { data: orders, isLoading: ordersLoading } = useQuery<OrderWithDetails[]>({
+  const { data: fetchedOrders, isLoading: ordersLoading } = useQuery<OrderWithDetails[]>({
     queryKey: ["/api/vendor/orders"],
     enabled: !!user,
   });
+
+   // Synchronize fetched orders with state
+   useEffect(() => {
+    if (fetchedOrders) {
+      setOrders((prevOrders) => {
+        // Merge fetched orders with local orders
+        const mergedOrders = [...fetchedOrders];
+        prevOrders.forEach((localOrder) => {
+          if (!fetchedOrders.some((order) => order.id === localOrder.id)) {
+            mergedOrders.unshift(localOrder); // Add local orders to the top
+          }
+        });
+        return mergedOrders;
+      });
+    }
+  }, [fetchedOrders]);
   
   // Fetch products for all orders
   const { isLoading: productsLoading } = useQuery({
@@ -82,28 +100,62 @@ export default function VendorOrders() {
       return { productsMap, updatedOrders };
     },
   });
+
+  const handleSocketEvent = (event: string, data: any) => {
+    if (event === "new-order") {
+      console.log("New order received:", data);
   
-  const isLoading = shopsLoading || ordersLoading || productsLoading;
+      // Add the new order to the local state
+      setOrders((prevOrders) => [data, ...prevOrders]);
   
+      // Invalidate the query to refetch orders from the API
+      queryClient.invalidateQueries({ queryKey: ["/api/vendor/orders"] });
+    }
+  
+    if (event === "order-status-update") {
+      console.log("Order status updated:", data);
+  
+      // Update the order status in the local state
+      setOrders((prevOrders) =>
+        prevOrders.map((order) =>
+          order.id === data.orderId ? { ...order, status: data.status } : order
+        )
+      );
+  
+      // Optionally refetch orders to ensure synchronization
+      queryClient.invalidateQueries({ queryKey: ["/api/vendor/orders"] });
+    }
+  };
+
+  // Use the WebSocket hook
+  useSocket(user?.id, user?.role, handleSocketEvent);
+  
+  const isLoading = shopsLoading || ordersLoading || productsLoading || queryClient.isFetching({ queryKey: ["/api/vendor/orders"] });  
   // Filter orders based on selected tab
   const filteredOrders = orders?.filter(order => 
     selectedTab === "all" || order.status === selectedTab
   );
   
   // Group orders by date
-  const groupOrdersByDate = (orders: OrderWithDetails[]) => {
-    const grouped: Record<string, OrderWithDetails[]> = {};
-    
-    orders.forEach(order => {
-      const date = new Date(order.createdAt).toLocaleDateString();
-      if (!grouped[date]) {
-        grouped[date] = [];
-      }
-      grouped[date].push(order);
-    });
-    
-    return grouped;
-  };
+  // Group orders by date and sort by latest
+const groupOrdersByDate = (orders: OrderWithDetails[]) => {
+  const grouped: Record<string, OrderWithDetails[]> = {};
+
+  // Sort orders by createdAt in descending order (latest first)
+  const sortedOrders = [...orders].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  sortedOrders.forEach((order) => {
+    const date = new Date(order.createdAt).toLocaleDateString();
+    if (!grouped[date]) {
+      grouped[date] = [];
+    }
+    grouped[date].push(order);
+  });
+
+  return grouped;
+};
   
   const groupedOrders = filteredOrders ? groupOrdersByDate(filteredOrders) : {};
   

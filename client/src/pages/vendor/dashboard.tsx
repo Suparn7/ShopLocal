@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import VendorLayout from "@/components/vendor/layout";
@@ -6,10 +6,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { Order, Shop } from "@shared/schema";
 import { useTranslation } from "react-i18next";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, getStatusBadgeClass } from "@/lib/utils";
 import { StoreStatus } from "@/components/vendor/store-status";
 import { OrderItem } from "@/components/vendor/order-item";
 import { useSocket } from "@/hooks/useSocket";
+import { queryClient } from "@/lib/queryClient";
 
 // Additional interface to include items in order
 interface OrderWithItems extends Order {
@@ -19,15 +20,35 @@ interface OrderWithItems extends Order {
 export default function VendorDashboard() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const [orders, setOrders] = useState<OrderWithItems[]>([]);
   console.log("VendorDashboard rendered");
   const handleSocketEvent = (event: string, data: any) => {
-    if (event === "product-update") {
-      console.log("Product updated:", data);
-      // Update state/UI based on the event
+    if (event === "new-order") {
+      console.log("New order received:", data);
+  
+      // Add the new order to the local state
+      setOrders((prevOrders) => [data, ...prevOrders]);
+  
+      // Invalidate the query to refetch orders from the API
+      queryClient.invalidateQueries({ queryKey: ["/api/vendor/orders"] });
+    }
+  
+    if (event === "order-status-update") {
+      console.log("Order status updated:", data);
+  
+      // Update the order status in the local state
+      setOrders((prevOrders) =>
+        prevOrders.map((order) =>
+          order.id === data.orderId ? { ...order, status: data.status } : order
+        )
+      );
+  
+      // Optionally refetch orders to ensure synchronization
+      queryClient.invalidateQueries({ queryKey: ["/api/vendor/orders"] });
     }
   };
 
-  useSocket(user?.id, handleSocketEvent);
+  useSocket(user?.id, user?.role, handleSocketEvent);
   // Fetch vendor shops
   const { data: shops, isLoading: shopsLoading } = useQuery<Shop[]>({
     queryKey: ["/api/vendor/shops"],
@@ -35,13 +56,27 @@ export default function VendorDashboard() {
   });
   
   // Fetch orders
-  const { data: orders, isLoading: ordersLoading } = useQuery<OrderWithItems[]>({
+  const { data: fetchedOrders, isLoading: ordersLoading } = useQuery<OrderWithItems[]>({
     queryKey: ["/api/vendor/orders"],
     enabled: !!user,
   });
+
+  useEffect(() => {
+    if (fetchedOrders) {
+      setOrders((prevOrders) => {
+        // Merge fetched orders with local orders
+        const mergedOrders = [...fetchedOrders];
+        prevOrders.forEach((localOrder) => {
+          if (!fetchedOrders.some((order) => order.id === localOrder.id)) {
+            mergedOrders.unshift(localOrder); // Add local orders to the top
+          }
+        });
+        return mergedOrders;
+      });
+    }
+  }, [fetchedOrders]);
   
-  const isLoading = shopsLoading || ordersLoading;
-  
+  const isLoading = shopsLoading || ordersLoading || queryClient.isFetching({ queryKey: ["/api/vendor/orders"] });  
   // Calculate statistics
   const getTodayOrders = () => {
     if (!orders) return [];
@@ -156,7 +191,7 @@ export default function VendorDashboard() {
                     {t("vendor.viewAll")}
                   </button>
                 </div>
-                
+
                 <div className="overflow-x-auto">
                   {!orders || orders.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
@@ -170,13 +205,26 @@ export default function VendorDashboard() {
                           <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-400">{t("vendor.customer")}</th>
                           <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-400">{t("vendor.amount")}</th>
                           <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-400">{t("vendor.status")}</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-400">{t("vendor.action")}</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-400">{t("vendor.date")}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-neutral-200">
-                        {orders.slice(0, 5).map(order => (
-                          <OrderItem key={order.id} order={order} />
-                        ))}
+                        {orders
+                          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) // Sort by date (latest first)
+                          .slice(0, 5) // Show only the top 5 recent orders
+                          .map(order => (
+                            <tr key={order.id}>
+                              <td className="px-3 py-2 text-sm">#{order.id}</td>
+                              <td className="px-3 py-2 text-sm">Customer #{order.customerId}</td>
+                              <td className="px-3 py-2 text-sm">{formatCurrency(order.totalAmount)}</td>
+                              <td className="px-3 py-2 text-sm">
+                                <span className={`badge ${getStatusBadgeClass(order.status)}`}>
+                                  {t(`status.${order.status}`)}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-sm">{new Date(order.createdAt).toLocaleDateString()}</td>
+                            </tr>
+                          ))}
                       </tbody>
                     </table>
                   )}

@@ -137,8 +137,7 @@ export function OrderItem({ order }: OrderItemProps) {
             
             <div>
               <div className="text-sm text-muted-foreground mb-1">{t("vendor.payment")}</div>
-              <div className="font-medium">{order.paymentMethod.toUpperCase()}</div>
-              <div className="text-sm text-muted-foreground">
+                <div className="font-medium">{order.paymentMethod?.toUpperCase() || "N/A"}</div>              <div className="text-sm text-muted-foreground">
                 {order.paymentStatus ? t("vendor.paid") : t("vendor.pending")}
               </div>
             </div>

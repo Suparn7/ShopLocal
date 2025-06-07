@@ -8,12 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2 } from "lucide-react";
 import { Review, Shop, User } from "@shared/schema";
 import { useTranslation } from "react-i18next";
+import { useSocket } from "@/hooks/useSocket";
 
 export default function VendorReviews() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const [selectedShopId, setSelectedShopId] = useState<number | undefined>(undefined);
   const [sortOption, setSortOption] = useState<string>("latest");
+  const [reviews, setReviews] = useState<Review[]>([]);
   
   // Fetch vendor shops
   const { data: shops, isLoading: shopsLoading } = useQuery<Shop[]>({
@@ -29,10 +31,27 @@ export default function VendorReviews() {
   }, [shops, selectedShopId]);
   
   // Fetch reviews for selected shop
-  const { data: reviews, isLoading: reviewsLoading } = useQuery<Review[]>({
+  const { data: fetchedReviews, isLoading: reviewsLoading } = useQuery<Review[]>({
     queryKey: [`/api/shops/${selectedShopId}/reviews`],
     enabled: !!selectedShopId,
   });
+
+  useEffect(() => {
+    if (fetchedReviews) {
+      setReviews(fetchedReviews);
+    }
+  }, [fetchedReviews]);
+
+   // Handle WebSocket events
+   const handleSocketEvent = (event: string, data: any) => {
+    if (event === "new-review" && data.shopId === selectedShopId) {
+      console.log("New review received:", data);
+      setReviews((prevReviews) => [data, ...prevReviews]);
+    }
+  };
+
+  // Use the WebSocket hook
+  useSocket(user?.id, user?.role, handleSocketEvent);
   
   // Fetch customers
   const { data: customers, isLoading: customersLoading } = useQuery<User[]>({

@@ -183,7 +183,7 @@ export async function registerRoutes(app: Express): Promise<HTTPServer> {
   
   app.post("/api/shops", ensureAuthenticated, checkRole(UserRole.VENDOR), async (req, res) => {
     try {
-      console.log("Incoming shop data:", req);
+     // console.log("Incoming shop data:", req);
   
       const validation = insertShopSchema.safeParse({
         ...req.body,
@@ -196,6 +196,7 @@ export async function registerRoutes(app: Express): Promise<HTTPServer> {
       }
   
       const shop = await storage.createShop(validation.data);
+      io.to("customer").emit("shop-added", shop);
       res.status(201).json(shop);
     } catch (error) {
       console.error("Error creating shop:", error);
@@ -231,10 +232,22 @@ export async function registerRoutes(app: Express): Promise<HTTPServer> {
       }
       
       const shop = await storage.updateShop(id, data);
+      io.to("customer").emit("shop-updated", shop);
       res.json(shop);
     } catch (error) {
       res.status(500).json({ message: "Failed to update shop" });
     }
+  });
+
+  // Delete Shop
+  app.delete("/api/shops/:id", ensureAuthenticated, async (req, res) => {
+    const shopId = req.params.id;
+    await storage.deleteShop(shopId);
+
+    // Emit event to all customers
+    io.to("customer").emit("shop-deleted", { shopId });
+
+    res.status(204).end();
   });
   
   // Get vendor shops
@@ -319,6 +332,7 @@ app.get("/api/admin/customers/:id/orders", ensureAuthenticated, checkRole(UserRo
     }
   });
   
+  //add product
   app.post("/api/shops/:shopId/products", ensureAuthenticated, async (req, res) => {
     try {
       const shopId = parseInt(req.params.shopId);
@@ -347,6 +361,9 @@ app.get("/api/admin/customers/:id/orders", ensureAuthenticated, checkRole(UserRo
       }
       
       const product = await storage.createProduct(validation.data);
+
+      // Emit event to the shop-specific room
+      io.to(`shop-${shopId}`).emit("product-added", product);
       res.status(201).json(product);
     } catch (error) {
       res.status(500).json({ message: "Failed to create product" });
@@ -378,8 +395,8 @@ app.get("/api/admin/customers/:id/orders", ensureAuthenticated, checkRole(UserRo
       
       // Update product
       const updatedProduct = await storage.updateProduct(id, req.body);
-      io.emit("product-update", { productId: id, isAvailable });
-
+       // Emit event to the shop-specific room
+      io.to(`shop-${product.shopId}`).emit("product-updated", updatedProduct);
       res.json(updatedProduct);
     } catch (error) {
       res.status(500).json({ message: "Failed to update product" });
@@ -411,6 +428,10 @@ app.get("/api/admin/customers/:id/orders", ensureAuthenticated, checkRole(UserRo
       
       // Delete product
       const deleted = await storage.deleteProduct(id);
+      if (deleted) {
+        // Emit event to the shop-specific room
+        io.to(`shop-${product.shopId}`).emit("product-deleted", { productId: id });
+      }
       if (!deleted) {
         return res.status(404).json({ message: "Product not found" });
       }
@@ -499,6 +520,21 @@ app.get("/api/admin/customers/:id/orders", ensureAuthenticated, checkRole(UserRo
       
       // Fetch order with items
       const items = await storage.getOrderItemsByOrderId(order.id);
+
+      // Emit real-time event to the vendor
+      io.to(`vendor-${shop.vendorId}`).emit("new-order", {
+        id: order.id,
+        createdAt: order.createdAt,
+        totalAmount: order.totalAmount,
+        status: order.status,
+        items,
+        paymentMethod: order.paymentMethod,
+        paymentStatus: order.paymentStatus, // Include paymentStatus here
+        customer: {
+          id: req.user.id,
+          name: req.user.name,
+        },
+      });
       
       res.status(201).json({ ...order, items });
     } catch (error) {
@@ -626,6 +662,16 @@ app.get("/api/admin/customers/:id/orders", ensureAuthenticated, checkRole(UserRo
       }
       
       const review = await storage.createReview(validation.data);
+
+      // Emit real-time event to the vendor
+      io.to(`vendor-${shop.vendorId}`).emit("new-review", {
+        id: review.id,
+        rating: review.rating,
+        comment: review.comment,
+        createdAt: review.createdAt,
+        customerId: review.customerId,
+        shopId: review.shopId,
+      });
       res.status(201).json(review);
     } catch (error) {
       res.status(500).json({ message: "Failed to create review" });

@@ -24,58 +24,11 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
   const [location] = useLocation();
   const { t } = useTranslation();
   const { coordinates, setCoordinates } = useCoordinates();
-  //console.log("coordinates in CustomerLayout:", coordinates);
+  const [_, navigate] = useLocation();
   const [cartOpen, setCartOpen] = useState(false);
- // const [cartItems, setCartItems] = useState<{ product: Product; quantity: number }[]>([]);
   const [isCartAnimated, setIsCartAnimated] = useState(false);
   const { cartItems, addToCart, updateQuantity, removeFromCart, calculateTotal, shop, clearCart } = useCart();
   const { toast } = useToast();
-
-  //  // Load cart items from localStorage on mount
-  //  useEffect(() => {
-  //   console.log("Loading cart items from localStorage");
-    
-  //   const storedCart = JSON.parse(localStorage.getItem("cart") || "[]");
-  //   setCartItems(storedCart);
-  // }, []);
-
-   // Trigger animation when cart changes
-  //  useEffect(() => {
-  //   if (cartItems.length > 0) {
-  //     setIsCartAnimated(true);
-  //     const timeout = setTimeout(() => setIsCartAnimated(false), 500); // Reset animation after 500ms
-  //     return () => clearTimeout(timeout);
-  //   }
-  // }, [cartItems]);
-
-  //  // Update cart items whenever localStorage changes
-  //  const syncCartWithLocalStorage = () => {
-  //   const storedCart = JSON.parse(localStorage.getItem("cart") || "[]");
-  //   setCartItems(storedCart);
-  // };
-
-  // const calculateTotal = () => {
-  //   return cartItems.reduce((total, item) => total + item.product.sellingPrice * item.quantity, 0);
-  // };
-
-  // const updateQuantity = (productId: number, quantity: number) => {
-  //   if (quantity <= 0) {
-  //     removeFromCart(productId);
-  //     return;
-  //   }
-
-  //   const updatedCart = cartItems.map((item) =>
-  //     item.product.id === productId ? { ...item, quantity } : item
-  //   );
-  //   setCartItems(updatedCart);
-  //   localStorage.setItem("cart", JSON.stringify(updatedCart));
-  // };
-
-  // const removeFromCart = (productId: number) => {
-  //   const updatedCart = cartItems.filter((item) => item.product.id !== productId);
-  //   setCartItems(updatedCart);
-  //   localStorage.setItem("cart", JSON.stringify(updatedCart));
-  // };
 
   const placeOrder = async () => {
     if (!shop || cartItems.length === 0) {
@@ -143,6 +96,8 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
 
             // Invalidate orders query to refresh data
             queryClient.invalidateQueries({ queryKey: ["/api/customer/orders"] });
+            navigate(`/customer/orders?orderId=${newOrder.id}`);
+
           } else {
             throw new Error("Payment verification failed.");
           }

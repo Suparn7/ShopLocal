@@ -89,3 +89,27 @@ export function getInitials(name: string): string {
   }
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
+
+export const isWithinRadius = (
+  shopLat: number,
+  shopLng: number,
+  userLat: number,
+  userLng: number,
+  radiusInKm: number
+): boolean => {
+  const earthRadius = 6371; // Radius of the Earth in km
+  const dLat = ((shopLat - userLat) * Math.PI) / 180;
+  const dLng = ((shopLng - userLng) * Math.PI) / 180;
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((userLat * Math.PI) / 180) *
+      Math.cos((shopLat * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distance = earthRadius * c;
+
+  return distance <= radiusInKm;
+};

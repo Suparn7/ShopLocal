@@ -5,9 +5,10 @@ import { useTranslation } from "react-i18next";
 
 interface CategoryCardProps {
   category: Category;
+  onClick?: () => void; // Optional custom onClick handler
 }
 
-export function CategoryCard({ category }: CategoryCardProps) {
+export function CategoryCard({ category, onClick }: CategoryCardProps) {
   const { t, i18n } = useTranslation();
   const currentLanguage = i18n.language;
   const [, navigate] = useLocation();
@@ -16,8 +17,13 @@ export function CategoryCard({ category }: CategoryCardProps) {
   const displayName = currentLanguage === 'hi' ? category.nameHi : category.name;
   
   const handleClick = useCallback(() => {
-    navigate(`/customer?categoryId=${category.id}`);
-  }, [category.id, navigate]);
+    if (onClick) {
+      onClick(); // Use custom onClick if provided
+    } else {
+      navigate(`/customer?categoryId=${category.id}`); // Default navigation
+    }
+  }, [category.id, navigate, onClick]);
+  
   
   return (
     <div 

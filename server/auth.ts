@@ -6,6 +6,8 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import { User as SelectUser, UserRole } from "@shared/schema";
+import { getWebSocketInstance, startWebSocketServer } from "./websocket";
+import { setWebSocketInstance } from "./routes";
 
 declare global {
   namespace Express {
@@ -14,6 +16,7 @@ declare global {
 }
 
 const scryptAsync = promisify(scrypt);
+
 
 async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
@@ -163,6 +166,15 @@ export function setupAuth(app: Express) {
       
       req.login(user, (err) => {
         if (err) return next(err);
+        
+        // WebSocket logic: Join vendor room if the user is a vendor
+        const io = getWebSocketInstance();
+
+        if (user.role === UserRole.VENDOR) {
+          io.to(`vendor-${user.id}`).emit("join-room", `vendor-${user.id}`);
+        } else if (user.role === UserRole.CUSTOMER) {
+          io.to(`customer-${user.id}`).emit("join-room", `customer-${user.id}`);
+        }
         return res.status(200).json({ 
           id: user.id, 
           name: user.name, 

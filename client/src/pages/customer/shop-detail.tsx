@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "wouter";
+import { useLocation, useParams } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import CustomerLayout from "@/components/customer/layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -27,15 +27,15 @@ import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { useStripe, useElements, PaymentElement } from "@stripe/react-stripe-js";
 import { useCart } from "@/context/CartContext";
+import { useSocket } from "@/hooks/useSocket";
 
 // console.log("PUSHHHHHHHH", process.env.VITE_STRIPE_PUBLISHABLE_KEY);
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "");
+// const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "");
 
 export default function ShopDetail() {
-  // Step 2: Initialize Stripe Elements
-  // const stripe = useStripe();
-  // const elements = useElements();
   const { id } = useParams();
+  const location = useLocation();
+  const [_, navigate] = useLocation();
   const shopId = parseInt(id || "0");
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -45,22 +45,70 @@ export default function ShopDetail() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.UPI);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const { addToCart, setShop } = useCart();
-
-  // console.log("Stripe publishable key:", import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
-  // const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "");
-  // console.log("Stripe promise:", stripePromise);
-
+  const [products, setProducts] = useState<Product[]>([]);
+  
   // Fetch shop details
-  const { data: shop, isLoading: shopLoading } = useQuery<Shop>({
+  const { data: shop, isLoading: shopLoading, refetch } = useQuery<Shop>({
     queryKey: [`/api/shops/${shopId}`],
     enabled: !!shopId,
   });
+
+  useEffect(() => {
+    if (shop) {
+      setShop(shop);
+    }
+  }, [shop]);
+  
+  useEffect(() => {
+    refetch(); // Refetch shops when navigating to this page
+  }, [location, refetch]);
   
   // Fetch products
-  const { data: products, isLoading: productsLoading } = useQuery<Product[]>({
+  const { data: fetchedProducts, isLoading: productsLoading } = useQuery<Product[]>({
     queryKey: [`/api/shops/${shopId}/products`],
     enabled: !!shopId,
   });
+
+  useEffect(() => {
+    if (fetchedProducts) {
+      setProducts(fetchedProducts);
+    }
+  }, [fetchedProducts]);
+
+    // Handle WebSocket events
+  const handleSocketEvent = (event: string, data: any) => {
+    if (event === "product-added") {
+      console.log("Product added:", data);
+      setProducts((prevProducts) => [...prevProducts, data]);
+      queryClient.invalidateQueries({ queryKey: [`/api/shops/${shopId}/products`] }); // Refetch products
+    }
+
+    if (event === "product-updated") {
+      console.log("Product updated:", data);
+      setProducts((prevProducts) =>
+        prevProducts.map((product) =>
+          product.id === data.id ? { ...product, ...data } : product
+        )
+      );
+      queryClient.invalidateQueries({ queryKey: [`/api/shops/${shopId}/products`] }); // Refetch products
+    }
+
+    if (event === "product-deleted") {
+      console.log("Product deleted:", data);
+      setProducts((prevProducts) =>
+        prevProducts.filter((product) => product.id !== data.productId)
+      );
+      queryClient.invalidateQueries({ queryKey: [`/api/shops/${shopId}/products`] }); // Refetch products
+    }
+
+    if (event === "shop-updated" && data.id === shopId) {
+      console.log("Shop updated:", data);
+      setShop((prevShop) => ({ ...prevShop, ...data }));
+    }
+  };
+
+  // Use the WebSocket hook with shopId
+  useSocket(user?.id, user?.role, handleSocketEvent, shopId);
   
   // Fetch reviews
   const { data: reviews, isLoading: reviewsLoading } = useQuery<Review[]>({
@@ -75,12 +123,6 @@ export default function ShopDetail() {
   });
   
   const isLoading = shopLoading || productsLoading || reviewsLoading;
-  
-  useEffect(() => {
-    if (shop) {
-      setShop(shop); // Set the shop in the CartContext
-    }
-  }, [shop]);
   
   useEffect(() => {
     if (shop) {
@@ -101,30 +143,6 @@ export default function ShopDetail() {
     };
   }, []);
   
-  // const addToCart = (product: Product) => {
-  //   const existingCart = JSON.parse(localStorage.getItem("cart") || "[]");
-  //   const existingItem = existingCart.find((item: any) => item.product.id === product.id);
-  
-  //   let updatedCart;
-  //   if (existingItem) {
-  //     updatedCart = existingCart.map((item: any) =>
-  //       item.product.id === product.id
-  //         ? { ...item, quantity: item.quantity + 1 }
-  //         : item
-  //     );
-  //   } else {
-  //     updatedCart = [...existingCart, { product, quantity: 1 }];
-  //   }
-  
-  //   localStorage.setItem("cart", JSON.stringify(updatedCart));
-  
-  //   toast({
-  //     title: t("customer.productAdded"),
-  //     description: product.name,
-  //   });
-  // };
-  
-
   const handleAddToCart = (product: Product) => {
     addToCart(product);
   };
@@ -153,6 +171,7 @@ export default function ShopDetail() {
   
   // Replace the `placeOrder` function
   const placeOrder = async () => {
+    console.log("DEBUG: Placing order with selected products", selectedProducts);
     if (!shop || !user || selectedProducts.length === 0) return;
 
     try {
@@ -175,6 +194,8 @@ export default function ShopDetail() {
         description: "Order Payment",
         order_id: orderId,
         handler: async (response: any) => {
+          console.log("DEBUG: Payment response", response);
+          
           // Step 3: Verify Payment
           const verifyResponse = await apiRequest("POST", "/api/payments/verify", {
             razorpay_payment_id: response.razorpay_payment_id,
@@ -183,6 +204,8 @@ export default function ShopDetail() {
           });
 
           if (verifyResponse.ok) {
+            console.log("DEBUG: Payment verification successful");
+            
             // Step 4: Place Order
             const orderData = {
               customerId: user.id,
@@ -210,8 +233,17 @@ export default function ShopDetail() {
             setSelectedProducts([]);
             setOrderDialogOpen(false);
 
+            console.log("DEBUG: Order placed successfully");
+
             // Invalidate orders query to refresh data
             queryClient.invalidateQueries({ queryKey: ["/api/customer/orders"] });
+             // Redirect to Orders page with the new order ID
+
+             console.log("trying to navigate", newOrder.id);
+             
+             navigate(`/customer/orders?orderId=${newOrder.id}`);
+             console.log("navigated to orders page");
+             
           } else {
             throw new Error("Payment verification failed.");
           }
@@ -234,6 +266,9 @@ export default function ShopDetail() {
         });
         return;
       }
+
+      console.log("DEBUG: Initializing Razorpay with options", options);
+      
       
       const razorpay = new window.Razorpay(options);
       razorpay.open();
